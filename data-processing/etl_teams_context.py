@@ -34,9 +34,15 @@ load_dotenv()
 
 # Database connection
 db_pass = urllib.parse.quote_plus(os.getenv("DB_PASSWORD"))
-db_url = f"postgresql://{os.getenv('DB_USER')}:{db_pass}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+db_port = os.getenv('DB_PORT', '5432')  # Default PostgreSQL port
+db_url = f"postgresql://{os.getenv('DB_USER')}:{db_pass}@{os.getenv('DB_HOST')}:{db_port}/{os.getenv('DB_NAME')}"
 engine = create_engine(db_url)
 Session = sessionmaker(bind=engine)
+
+# ========================================
+# STAGIONI DA CARICARE (solo recenti)
+# ========================================
+SEASONS_TO_LOAD = ['2425', '2526']  # 2024/25 e 2025/26
 
 # ========================================
 # CONFIGURAZIONE ELO
@@ -107,16 +113,11 @@ def normalize_team_name(name: str) -> str:
 def load_data_automatic():
     """
     Scarica dati storici Serie A da football-data.co.uk.
-    Ultime 10 stagioni (2016-2026).
+    Solo le stagioni configurate in SEASONS_TO_LOAD (es. 2024/25, 2025/26).
     """
     print("🌐 DOWNLOAD DATASET STORICO SERIE A")
     print("=" * 50)
-
-    # Ultime 10 stagioni
-    seasons = [
-        '1617', '1718', '1819', '1920',
-        '2021', '2122', '2223', '2324', '2425', '2526'
-    ]
+    print(f"   📅 Stagioni da caricare: {SEASONS_TO_LOAD}")
 
     base_url = "https://www.football-data.co.uk/mmz4281/{}/I1.csv"
     
@@ -125,7 +126,7 @@ def load_data_automatic():
 
     df_list = []
 
-    for season in seasons:
+    for season in SEASONS_TO_LOAD:
         url = base_url.format(season)
         try:
             print(f"   📥 Stagione {season}...", end=" ")
@@ -349,9 +350,11 @@ def save_to_database(records):
             session.execute(insert(Team), team_records)
             session.commit()
         
-        # Svuota tabella esistente (per ricaricamento completo)
-        print("   🗑️ Pulizia dati esistenti...")
-        session.query(TeamPerformance).delete()
+        # Pulizia: cancella SOLO le stagioni che stiamo per ricaricare
+        print(f"   🗑️ Pulizia dati esistenti per stagioni {SEASONS_TO_LOAD}...")
+        for season in SEASONS_TO_LOAD:
+            deleted = session.query(TeamPerformance).filter_by(season=season).delete()
+            print(f"      → Stagione {season}: {deleted} record rimossi")
         session.commit()
         
         # Inserimento bulk

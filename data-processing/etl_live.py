@@ -10,7 +10,8 @@ from models import PlayerMatchStat, Team, League
 load_dotenv()
 
 db_pass = urllib.parse.quote_plus(os.getenv("DB_PASSWORD"))
-db_url = f"postgresql://{os.getenv('DB_USER')}:{db_pass}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+db_port = os.getenv('DB_PORT', '5432')  # Default PostgreSQL port
+db_url = f"postgresql://{os.getenv('DB_USER')}:{db_pass}@{os.getenv('DB_HOST')}:{db_port}/{os.getenv('DB_NAME')}"
 engine = create_engine(db_url)
 Session = sessionmaker(bind=engine)
 

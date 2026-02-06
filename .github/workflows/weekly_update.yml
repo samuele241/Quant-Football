@@ -39,7 +39,7 @@ jobs:
           pip install -r data-processing/requirements.txt
       
       # 5. Esecuzione script ETL con variabili d'ambiente
-      - name: Run ETL Script
+      - name: Run Team Context ETL
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
@@ -47,6 +47,18 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: ${{ secrets.DB_PORT }}
         run: |
+          echo "📊 Aggiornamento dati squadre (ELO, Forma)..."
+          python data-processing/etl_teams_context.py
+      
+      - name: Run Player Stats ETL
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+        run: |
+          echo "⚽ Aggiornamento statistiche giocatori..."
           python data-processing/etl_live.py
       
       # 6. (Opzionale) Notifica successo
