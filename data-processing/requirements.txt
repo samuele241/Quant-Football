@@ -1,0 +1,17 @@
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+
+# API & Web
+requests==2.31.0
+soccerdata==1.4.2
+
+# Environment
+python-dotenv==1.0.0
+
+# Utilities
+urllib3==2.1.0
