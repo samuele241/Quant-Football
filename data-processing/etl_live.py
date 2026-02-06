@@ -68,6 +68,15 @@ def etl_season(season_id: str):
     """
     session = Session()
 
+    # 🧹 PULIZIA: Cancella i dati esistenti per questa stagione per evitare duplicati
+    print(f"🧹 Pulizia dati esistenti per stagione {season_id}...")
+    deleted_count = session.execute(
+        text("DELETE FROM player_match_stats WHERE season = :season"),
+        {"season": season_id}
+    ).rowcount
+    session.commit()
+    print(f"   ✓ Rimossi {deleted_count} record esistenti.")
+
     print(f"📥 Scaricamento dati Serie A stagione {season_id}...")
     scraper = sd.Understat(leagues=['ITA-Serie A'], seasons=season_id)
     stats = scraper.read_player_match_stats().reset_index()
