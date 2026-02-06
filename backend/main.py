@@ -803,3 +803,79 @@ def get_league_strength_rankings(season: str = "2025"):
         "season": season,
         "rankings": teams
     }
+
+
+# ============================================
+# LEAGUE FORECAST - Monte Carlo Simulation
+# ============================================
+from datetime import datetime
+from functools import lru_cache
+import league_simulator
+
+# Cache per 5 minuti (evita ricalcolo se utente ricarica pagina)
+_forecast_cache = {"data": None, "timestamp": None}
+CACHE_DURATION_SECONDS = 300  # 5 minuti
+
+@app.get("/analytics/league-forecast")
+def get_league_forecast(season: str = "2025", simulations: int = 10000, use_cache: bool = True):
+    """
+    Simula il resto della stagione Serie A usando Monte Carlo (10k iterazioni).
+    
+    Returns:
+        - Per ogni squadra: probabilità vittoria, top4, retrocessione
+        - Punti medi attesi, posizione media
+        - Classifica attuale e ELO corrente
+    
+    Query params:
+        - season: Stagione da simulare (default: 2025)
+        - simulations: Numero iterazioni (default: 10000, max: 50000)
+        - use_cache: Se True, usa cache di 5 minuti (default: True)
+    """
+    global _forecast_cache
+    
+    # Limita simulazioni max
+    simulations = min(simulations, 50000)
+    
+    # Check cache
+    if use_cache and _forecast_cache["data"] is not None:
+        elapsed = (datetime.now() - _forecast_cache["timestamp"]).total_seconds()
+        if elapsed < CACHE_DURATION_SECONDS:
+            print(f"📦 Usando forecast dalla cache ({int(elapsed)}s fa)")
+            return {
+                "cached": True,
+                "cache_age_seconds": int(elapsed),
+                **_forecast_cache["data"]
+            }
+    
+    try:
+        # Esegui simulazione
+        forecast = league_simulator.run_simulation(season=season, n_simulations=simulations)
+        
+        # Ordina per probabilità vittoria
+        sorted_forecast = sorted(
+            forecast.items(),
+            key=lambda x: (x[1]['win_league_pct'], x[1]['avg_points']),
+            reverse=True
+        )
+        
+        result = {
+            "season": season,
+            "simulations": simulations,
+            "forecast": dict(sorted_forecast),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+        # Aggiorna cache
+        _forecast_cache["data"] = result
+        _forecast_cache["timestamp"] = datetime.now()
+        
+        return {
+            "cached": False,
+            **result
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore nella simulazione: {str(e)}"
+        )
