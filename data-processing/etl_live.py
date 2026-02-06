@@ -9,9 +9,15 @@ from models import PlayerMatchStat, Team, League
 
 load_dotenv()
 
-db_pass = urllib.parse.quote_plus(os.getenv("DB_PASSWORD"))
-db_port = os.getenv('DB_PORT') or '5432'  # Default se mancante o vuoto
-db_url = f"postgresql://{os.getenv('DB_USER')}:{db_pass}@{os.getenv('DB_HOST')}:{db_port}/{os.getenv('DB_NAME')}"
+# Pulisci variabili d'ambiente (rimuovi spazi/newline)
+db_user = os.getenv('DB_USER', '').strip()
+db_password = os.getenv('DB_PASSWORD', '').strip()
+db_host = os.getenv('DB_HOST', '').strip()
+db_port = os.getenv('DB_PORT', '').strip() or '5432'
+db_name = os.getenv('DB_NAME', '').strip()
+
+db_pass = urllib.parse.quote_plus(db_password)
+db_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 engine = create_engine(db_url)
 Session = sessionmaker(bind=engine)
 
