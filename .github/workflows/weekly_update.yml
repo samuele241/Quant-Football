@@ -1,0 +1,62 @@
+name: Weekly Data Update
+
+on:
+  # Esecuzione automatica ogni Martedì alle 03:00 UTC
+  schedule:
+    - cron: '0 3 * * 2'  # Minuto Ora Giorno_del_mese Mese Giorno_della_settimana (0=Domenica, 2=Martedì)
+  
+  # Permetti esecuzione manuale dal tab Actions di GitHub
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout del codice repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # 2. Setup Python 3.10
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      # 3. Cache delle dipendenze Python per velocizzare
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      # 4. Installazione dipendenze
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r data-processing/requirements.txt
+      
+      # 5. Esecuzione script ETL con variabili d'ambiente
+      - name: Run ETL Script
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+        run: |
+          python data-processing/etl_live.py
+      
+      # 6. (Opzionale) Notifica successo
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "✅ Data update completed successfully at $(date)"
+      
+      # 7. (Opzionale) Notifica fallimento
+      - name: Notify Failure
+        if: failure()
+        run: |
+          echo "❌ Data update failed at $(date)"
