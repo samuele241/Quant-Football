@@ -38,6 +38,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r data-processing/requirements.txt
       
+      # 4.5 Debug connection (senza esporre password)
+      - name: Debug Database Connection
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+        run: |
+          echo "🔍 Verifica configurazione database:"
+          echo "DB_HOST: ${DB_HOST}"
+          echo "DB_NAME: ${DB_NAME}"
+          echo "DB_USER: ${DB_USER}"
+          echo "DB_PORT: ${DB_PORT}"
+          echo "DB_USER length: ${#DB_USER}"
+          echo "DB_NAME length: ${#DB_NAME}"
+      
       # 5. Esecuzione script ETL con variabili d'ambiente
       - name: Run Team Context ETL
         env:
