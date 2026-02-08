@@ -29,6 +29,7 @@ const ScoutingPage: React.FC = () => {
   const [debounceTimer, setDebounceTimer] = useState<number | null>(null);
   const [algorithmUsed, setAlgorithmUsed] = useState<string>("");
   const [maxBudget, setMaxBudget] = useState<number>(50); // Budget massimo in milioni €
+  const [selectedSeason, setSelectedSeason] = useState<string>("2025");
 
   // Cleanup del timer allo smontaggio del componente
   useEffect(() => {
@@ -47,7 +48,9 @@ const ScoutingPage: React.FC = () => {
     setShowSuggestions(false);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/analytics/scouting/similar/${encodeURIComponent(query)}`);
+      const response = await fetch(
+        `http://127.0.0.1:8000/analytics/scouting/similar/${encodeURIComponent(query)}?season=${encodeURIComponent(selectedSeason)}`
+      );
       
       if (!response.ok) throw new Error("Giocatore non trovato nel database");
       
@@ -157,6 +160,28 @@ const ScoutingPage: React.FC = () => {
           <p className="text-slate-400 max-w-2xl mx-auto text-lg">
             Inserisci un giocatore per trovare i suoi cloni statistici basati su oltre 150 parametri di efficienza.
           </p>
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              onClick={() => setSelectedSeason("2024")}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                selectedSeason === "2024"
+                  ? "bg-cyan-500 text-slate-900 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              2024 / 2025
+            </button>
+            <button
+              onClick={() => setSelectedSeason("2025")}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                selectedSeason === "2025"
+                  ? "bg-cyan-500 text-slate-900 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              2025 / 2026
+            </button>
+          </div>
         </div>
 
         {/* Search Bar Container */}
@@ -316,7 +341,16 @@ const ScoutingPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                   {results.map((player, idx) => (
-                    <SimilarityCard key={idx} player={player} delay={idx * 0.1} />
+                    <SimilarityCard
+                      key={idx}
+                      player={player}
+                      delay={idx * 0.1}
+                      onViewAnalytics={(name) =>
+                        router.push(
+                          `/player/${encodeURIComponent(name)}?season=${encodeURIComponent(selectedSeason)}`
+                        )
+                      }
+                    />
                   ))}
                 </div>
               </motion.div>
@@ -362,7 +396,11 @@ const ScoutingPage: React.FC = () => {
   );
 };
 
-const SimilarityCard: React.FC<{ player: SimilarPlayer; delay: number }> = ({ player, delay }) => (
+const SimilarityCard: React.FC<{
+  player: SimilarPlayer;
+  delay: number;
+  onViewAnalytics: (playerName: string) => void;
+}> = ({ player, delay, onViewAnalytics }) => (
   <motion.div 
     initial={{ opacity: 0, scale: 0.9 }} 
     animate={{ opacity: 1, scale: 1 }} 
@@ -424,7 +462,10 @@ const SimilarityCard: React.FC<{ player: SimilarPlayer; delay: number }> = ({ pl
       )}
     </div>
 
-    <button className="w-full mt-6 py-2.5 border border-white/10 rounded-xl text-[9px] font-bold uppercase tracking-widest text-slate-400 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1 group/btn">
+    <button
+      onClick={() => onViewAnalytics(player.player)}
+      className="w-full mt-6 py-2.5 border border-white/10 rounded-xl text-[9px] font-bold uppercase tracking-widest text-slate-400 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1 group/btn"
+    >
       View Analytics <ChevronRight className="w-3 h-3 group-hover/btn:translate-x-1 transition-transform" />
     </button>
   </motion.div>

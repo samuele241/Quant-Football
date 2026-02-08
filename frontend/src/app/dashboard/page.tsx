@@ -128,6 +128,7 @@ const App: React.FC = () => {
           <button onClick={() => router.push('/')} className="hover:text-[#00ff85] transition-colors">DASHBOARD</button>
           <button onClick={() => router.push('/scouting')} className="hover:text-[#00ff85] transition-colors">SCOUTING</button>
           <button onClick={() => router.push('/metrics')} className="hover:text-[#00ff85] transition-colors">METRICS</button>
+          <button onClick={() => router.push('/league-simulator')} className="hover:text-[#00ff85] transition-colors">LEAGUE SIMULATOR</button>
           <button 
             onClick={() => fetchData(selectedSeason, selectedTeamId)} 
             className="p-2 hover:bg-white/5 rounded-full transition-colors"

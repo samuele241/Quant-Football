@@ -213,6 +213,13 @@ const PlayerPage: React.FC = () => {
   }
 
   const isBullish = data.trend_slope > 0;
+  const birthDate = data.birth_date ? new Date(data.birth_date) : null;
+  const age = birthDate
+    ? Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null;
+  const birthDateLabel = birthDate
+    ? birthDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null;
 
   // Advanced metrics provided by API (con Fair Value!)
   const adv = data.advanced_metrics ?? {
@@ -221,7 +228,14 @@ const PlayerPage: React.FC = () => {
     total_shots: 0,
     xg_diff: 0,
     fair_value: 0,
-  } as { conversion_rate: number; goals_per_90: number; total_shots: number; xg_diff: number; fair_value: number };
+  } as {
+    conversion_rate: number;
+    goals_per_90: number;
+    total_shots: number;
+    xg_diff: number;
+    fair_value: number;
+    fair_value_updated_at?: string | null;
+  };
 
   // Build a contextual System Note based on season advanced metrics and trend
   const systemNotes: string[] = [];
@@ -266,13 +280,35 @@ const PlayerPage: React.FC = () => {
               <Shield className="w-3 h-3 text-slate-400" />
               <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Serie A Enilive</span>
             </div>
-            <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-none mb-4 uppercase">
-              {data.player.split(' ').map((part, i) => (
-                <span key={i} className={i === 1 ? 'text-[#00ff85] block' : 'text-white block'}>
-                  {part}
-                </span>
-              ))}
-            </h1>
+            <div className="flex flex-col md:flex-row md:items-end md:gap-6">
+              <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-none mb-4 uppercase">
+                {data.player.split(' ').map((part, i) => (
+                  <span key={i} className={i === 1 ? 'text-[#00ff85] block' : 'text-white block'}>
+                    {part}
+                  </span>
+                ))}
+              </h1>
+              <div className="glass rounded-3xl p-6 border border-white/5 bg-gradient-to-br from-white/[0.04] to-transparent md:mb-4 md:w-[280px]">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-white/10 rounded-lg">
+                    <Calendar className="w-5 h-5 text-slate-300" />
+                  </div>
+                  <h4 className="font-bold text-slate-200">Age Profile</h4>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-5xl font-black text-white leading-none">{age ?? '—'}</div>
+                    <div className="text-xs text-slate-400 uppercase font-bold tracking-wider mt-1">Years</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">Birth Date</div>
+                    <div className="text-sm font-semibold text-slate-200 mt-1">
+                      {birthDateLabel ?? 'Not available'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSelectedSeason('2024')}
@@ -363,6 +399,11 @@ const PlayerPage: React.FC = () => {
               </div>
               <div className="mt-4 pt-4 border-t border-white/5 text-xs text-slate-400 text-center">
                 Based on performance metrics & market standards
+                {adv.fair_value_updated_at && (
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    Updated {new Date(adv.fair_value_updated_at).toLocaleDateString('it-IT')}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 export interface PlayerDetailData {
   player: string;
+  birth_date?: string | null;
   trend_slope: number;
   advanced_metrics?: {
     conversion_rate: number;
@@ -7,6 +8,7 @@ export interface PlayerDetailData {
     total_shots: number;
     xg_diff: number;
     fair_value: number; // Fair Value in €
+    fair_value_updated_at?: string | null;
   };
   history: Array<{
     date: string;

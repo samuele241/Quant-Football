@@ -31,12 +31,12 @@ def get_player_context_analysis(player_name: str, season: str = "2025"):
                 pms.match_date,
                 pms.opponent,
                 pms.goals,
-                pms.xg,
+                pms.npxg as xg,
                 pms.team_id,
                 tp.elo as opponent_elo,
                 tp.rolling_xg_form as opponent_attack_form,
                 tp.rolling_ga_form as opponent_defense_form
-            FROM player_match_stats pms
+            FROM v_full_match_stats pms
             LEFT JOIN team_performance tp 
                 ON pms.opponent = tp.team_id 
                 AND pms.match_date = tp.match_date
@@ -65,8 +65,47 @@ def get_player_context_analysis(player_name: str, season: str = "2025"):
     top_team_goals = 0  # Gol vs squadre ELO > 1600
     bottom_team_goals = 0  # Gol vs squadre ELO < 1450
     
-    with engine.connect() as conn:
-        rows = conn.execute(query, {"name": decoded_name, "season": season})
+    def load_rows(sql_query):
+        with engine.connect() as conn:
+            return conn.execute(sql_query, {"name": decoded_name, "season": season})
+
+    try:
+        rows = load_rows(query)
+    except Exception:
+        fallback_query = text("""
+            WITH player_matches AS (
+                SELECT 
+                    pms.match_date,
+                    NULL as opponent,
+                    pms.goals,
+                    pms.npxg as xg,
+                    pms.team_id,
+                    tp.elo as opponent_elo,
+                    tp.rolling_xg_form as opponent_attack_form,
+                    tp.rolling_ga_form as opponent_defense_form
+                FROM v_full_match_stats pms
+                LEFT JOIN team_performance tp 
+                    ON pms.match_date = tp.match_date
+                WHERE pms.player_name = :name 
+                    AND pms.season = :season
+                    AND pms.minutes > 0
+            )
+            SELECT 
+                match_date,
+                opponent,
+                goals,
+                xg,
+                opponent_elo,
+                opponent_attack_form,
+                opponent_defense_form
+            FROM player_matches
+            ORDER BY match_date ASC
+        """)
+        try:
+            rows = load_rows(fallback_query)
+        except Exception:
+            xa_fallback = text(str(fallback_query).replace("npxg", "xa"))
+            rows = load_rows(xa_fallback)
         
         for row in rows:
             opponent_elo = float(row[4]) if row[4] else 1500.0

@@ -17,9 +17,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv()
+# Carica .env dalla directory data-processing (come fa main.py)
+load_dotenv("../data-processing/.env")
 
-# Database connection
+# Database connection - Pulisci variabili d'ambiente
 db_user = os.getenv('DB_USER', '').strip()
 db_password = os.getenv('DB_PASSWORD', '').strip()
 db_host = os.getenv('DB_HOST', '').strip()
@@ -40,6 +41,9 @@ def normalize_team_name(name: str) -> str:
     """
     Normalizza i nomi squadre da Understat al formato DB.
     """
+    if not name:
+        return 'Unknown'
+    
     mapping = {
         'Atalanta': 'Atalanta',
         'Bologna': 'Bologna',
@@ -53,8 +57,10 @@ def normalize_team_name(name: str) -> str:
         'Lazio': 'Lazio',
         'Lecce': 'Lecce',
         'AC Milan': 'AC_Milan',
+        'Milan': 'AC_Milan',
         'Napoli': 'Napoli',
-        'Parma': 'Parma',
+        'Parma': 'Parma_Calcio',
+        'Parma Calcio 1913': 'Parma_Calcio',
         'Roma': 'Roma',
         'Torino': 'Torino',
         'Udinese': 'Udinese',
@@ -80,31 +86,42 @@ def get_remaining_fixtures(season: str = '2025') -> List[Dict]:
         fixtures_df = scraper.read_schedule().reset_index()
         
         print(f"   ✓ Scaricate {len(fixtures_df)} partite totali")
+        print(f"   ℹ️ Colonne disponibili: {list(fixtures_df.columns)}")
         
         # Filtra solo partite future (data >= oggi)
         today = date.today()
         remaining = []
         
-        for _, row in fixtures_df.iterrows():
-            match_date = row.get('date')
-            if isinstance(match_date, str):
-                match_date = datetime.strptime(match_date.split()[0], '%Y-%m-%d').date()
-            elif hasattr(match_date, 'date'):
-                match_date = match_date.date()
-            
-            # Se la partita non è ancora stata giocata
-            if match_date >= today:
-                home_team = normalize_team_name(row.get('home'))
-                away_team = normalize_team_name(row.get('away'))
+        for idx, row in fixtures_df.iterrows():
+            try:
+                match_date = row.get('date')
+                if isinstance(match_date, str):
+                    match_date = datetime.strptime(match_date.split()[0], '%Y-%m-%d').date()
+                elif hasattr(match_date, 'date'):
+                    match_date = match_date.date()
                 
-                remaining.append({
-                    'home': home_team,
-                    'away': away_team,
-                    'date': match_date
-                })
+                # Se la partita non è ancora stata giocata
+                if match_date >= today:
+                    # Prova diversi nomi colonne
+                    home_team = row.get('home') or row.get('home_team') or row.get('HomeTeam')
+                    away_team = row.get('away') or row.get('away_team') or row.get('AwayTeam')
+                    
+                    if home_team and away_team:
+                        home_team = normalize_team_name(str(home_team))
+                        away_team = normalize_team_name(str(away_team))
+                        
+                        remaining.append({
+                            'home': home_team,
+                            'away': away_team,
+                            'date': match_date
+                        })
+            except Exception as e:
+                print(f"   ⚠️ Errore riga {idx}: {e}")
+                continue
         
         print(f"   ✓ Partite rimanenti: {len(remaining)}")
-        print(f"   📊 Esempio prima partita: {remaining[0]['home']} vs {remaining[0]['away']} il {remaining[0]['date']}")
+        if remaining:
+            print(f"   📊 Esempio prima partita: {remaining[0]['home']} vs {remaining[0]['away']} il {remaining[0]['date']}")
         
         return remaining
     
@@ -125,32 +142,40 @@ def get_current_standings(season: str = '2025') -> Dict[str, Dict]:
     
     session = Session()
     
-    # Mappa season: player_match_stats usa "2025", team_performance usa "2526"
-    team_season_map = {
-        '2024': '2425',
-        '2025': '2526'
-    }
-    team_season = team_season_map.get(season, season)
-    
+    # Query semplificata: calcola direttamente vittorie/pareggi/sconfitte
+    # invece di usare subquery complessa per opponent_goals
     query = text("""
-        WITH match_results AS (
-            SELECT DISTINCT
-                pms.team_id,
-                pms.opponent,
-                pms.match_date,
-                SUM(pms.goals) as team_goals,
-                -- Gol avversario (somma goal dell'avversario nella stessa partita)
-                (SELECT SUM(pms2.goals) 
-                 FROM player_match_stats pms2 
-                 WHERE pms2.team_id = pms.opponent 
-                   AND pms2.opponent = pms.team_id
-                   AND pms2.match_date = pms.match_date
-                   AND pms2.season = pms.season
-                ) as opponent_goals
-            FROM player_match_stats pms
-            WHERE pms.season = :season
-              AND pms.minutes > 0
-            GROUP BY pms.team_id, pms.opponent, pms.match_date
+        WITH team_matches AS (
+            -- Per ogni partita, prendi i gol della squadra
+            SELECT 
+                team_id,
+                match_date,
+                opponent,
+                SUM(goals) as team_goals
+            FROM v_full_match_stats
+            WHERE season = :season AND minutes > 0
+            GROUP BY team_id, match_date, opponent
+        ),
+        match_results AS (
+            -- Unisci ogni partita con quella dell'avversario per avere entrambi i punteggi
+            -- Usa LIKE per gestire casi come "Parma Calcio" → "Parma_Calcio_1913"
+            SELECT 
+                tm.team_id,
+                tm.match_date,
+                tm.opponent,
+                tm.team_goals,
+                opp.team_goals as opponent_goals
+            FROM team_matches tm
+            LEFT JOIN team_matches opp 
+                ON (
+                    REPLACE(tm.opponent, ' ', '_') = opp.team_id 
+                    OR opp.team_id LIKE REPLACE(tm.opponent, ' ', '_') || '%'
+                )
+                AND (
+                    tm.team_id = REPLACE(opp.opponent, ' ', '_')
+                    OR tm.team_id LIKE REPLACE(opp.opponent, ' ', '_') || '%'
+                )
+                AND tm.match_date = opp.match_date
         )
         SELECT 
             team_id,
@@ -161,18 +186,21 @@ def get_current_standings(season: str = '2025') -> Dict[str, Dict]:
                 ELSE 0
             END) as points,
             SUM(team_goals) as gf,
-            SUM(opponent_goals) as ga
+            COALESCE(SUM(opponent_goals), 0) as ga
         FROM match_results
-        WHERE opponent_goals IS NOT NULL  -- Solo partite completate
+        WHERE opponent_goals IS NOT NULL
         GROUP BY team_id
-        ORDER BY points DESC, (SUM(team_goals) - SUM(opponent_goals)) DESC
+        ORDER BY points DESC, (SUM(team_goals) - COALESCE(SUM(opponent_goals), 0)) DESC
     """)
     
     standings = {}
     rows = session.execute(query, {'season': season}).fetchall()
     
     for row in rows:
-        team_id = row[0]
+        raw_team_id = row[0]
+        # Normalize: rimuovi suffissi anno (es. "_1913") per match con team_performance
+        team_id = raw_team_id.replace('_1913', '').replace('_1899', '').replace('_1907', '')
+        
         standings[team_id] = {
             'played': int(row[1]),
             'points': int(row[2]),
@@ -188,6 +216,22 @@ def get_current_standings(season: str = '2025') -> Dict[str, Dict]:
     sorted_teams = sorted(standings.items(), key=lambda x: (x[1]['points'], x[1]['gd']), reverse=True)
     for i, (team, stats) in enumerate(sorted_teams[:3], 1):
         print(f"      {i}. {team}: {stats['points']} pts (GD: {stats['gd']:+d})")
+    
+    # Fix: Aggiungi squadre con ELO ma senza standings (con valori di default)
+    # Questo succede quando la squadra non ha ancora partite con opponent_goals validi
+    team_elos_available = get_team_elos(season)
+    missing_teams = set(team_elos_available.keys()) - set(standings.keys())
+    if missing_teams:
+        print(f"   ⚠️ {len(missing_teams)} squadre con ELO ma senza classifica (aggiunte con 0 punti)")
+        for team in missing_teams:
+            standings[team] = {
+                'played': 0,
+                'points': 0,
+                'gf': 0,
+                'ga': 0,
+                'gd': 0
+            }
+            print(f"      → {team} (ELO: {team_elos_available[team]:.0f})")
     
     return standings
 
@@ -326,6 +370,8 @@ def run_simulation(season: str = '2025', n_simulations: int = 10000) -> Dict:
     
     # 3. Esegui simulazioni
     print(f"\n⚙️ Simulazione in corso...")
+    skipped_fixtures = set()
+    
     for sim in range(n_simulations):
         if (sim + 1) % 2000 == 0:
             print(f"   → Completate {sim + 1:,}/{n_simulations:,} simulazioni...")
@@ -348,6 +394,14 @@ def run_simulation(season: str = '2025', n_simulations: int = 10000) -> Dict:
             
             # Skip se squadra non ha ELO (es. promossa non tracciata)
             if home not in team_elos or away not in team_elos:
+                if sim == 0:  # Log solo prima iterazione
+                    skipped_fixtures.add(f"{home} vs {away} (missing ELO)")
+                continue
+            
+            # Skip se squadra non nella classifica (mismatch nomi)
+            if home not in sim_standings or away not in sim_standings:
+                if sim == 0:  # Log solo prima iterazione
+                    skipped_fixtures.add(f"{home} vs {away} (not in standings)")
                 continue
             
             result = simulate_match(team_elos[home], team_elos[away])
@@ -399,6 +453,11 @@ def run_simulation(season: str = '2025', n_simulations: int = 10000) -> Dict:
     # 4. Calcola probabilità finali
     print(f"\n✅ SIMULAZIONE COMPLETATA")
     print(f"=" * 60)
+    
+    if skipped_fixtures:
+        print(f"\n⚠️ {len(skipped_fixtures)} partite saltate (squadre non tracciate):")
+        for skip in list(skipped_fixtures)[:5]:
+            print(f"   - {skip}")
     
     forecast = {}
     for team in teams:
